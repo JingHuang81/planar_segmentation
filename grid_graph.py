@@ -62,8 +62,9 @@ class GridGraph():
         # if r is None, there should not be any double edge in the primal graph.
         if r is None or l is None:
             k_contract = [k for k in self.primal[h] if k[0] == t]
-            #assert(len(k_contract) < 2)
             if len(k_contract) == 0:
+                if len(self.primal[t]) == 0:
+                    self.primal.pop(t)
                 return
             r = k_contract[0][1]
             l = k_contract[0][2]
@@ -77,8 +78,8 @@ class GridGraph():
         # For a face f, degree(f) <= 2, this cleans up bigon and monogon.
         for f in set([f_left, f_right]):
             if len(self.dual[f]) <= 2 and len(self.dual[f]) > 0:
-                # Pick an edge at dual vertex f
-                dual_d = self.dual[f].values()[0]
+                # Pick an edge at dual vertex f that has a larger weight
+                dual_d = max(self.dual[f].values(), key=lambda d:d.weight)
                 self._contract_and_remove(
                     dual_d.tail, dual_d.head, dual_d.left, dual_d.right,
                     self.dual)
@@ -88,7 +89,7 @@ class GridGraph():
 
     def _contract_and_remove(self, h, t, r, l, graph):
         #if len(graph) <= 6:
-        #    print h, t, r, l
+        #print h, t, r, l
         # Contract edge in G
         d = graph[h].pop((t, r, l))
         d_rev = graph[t].pop((h, d.left, d.right))

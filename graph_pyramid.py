@@ -8,45 +8,54 @@ from disjoint_set import DisjointSet
 class GraphPyramid():
     def __init__(self, h, w, edge_weights):
         self.shape = (h, w)
-        self.weights = edge_weights
         self.grid_graph = GridGraph(h, w, edge_weights)
         self.segment = DisjointSet(h * w)
+        self.component = {}
         self.pyramid = self._build_pyramid()
 
     def _build_pyramid(self):
         # Build a hierarchy of partitions from the base graph.
-        for k in range(20): # TODO: Check termination condition.
+        for k in range(10):
             contraction_kernel = set()
             # Find minimum weighted edge from each vertex and
             # add qualified edges to contraction edge set.
-            min_edges = set()
-            for v in self.grid_graph.vertices():
-                neighbors = {d.tail : d.weight
-                             for d in self.grid_graph.primal[v].values()}
-                if len(neighbors) == 0:
-                    continue
-                # Add all minimum edges in.
-                min_edge_val = min(neighbors.values())
-                for u in neighbors.keys():
-                    if neighbors[u] == min_edge_val:
-                        if (min(u, v), max(u, v)) in min_edges:
-                            # TODO: Test Ext(CC) < P*Int(cc)
-                            contraction_kernel.add((min(u, v), max(u, v)))
-                        else:
-                            min_edges.add((min(u, v), max(u, v)))
+            for u in self.grid_graph.vertices():
+                if len(self.grid_graph.primal[u]) > 0:
+                    d = min(self.grid_graph.primal[u].values(),
+                            key=lambda d:d.weight)
+                    # Check Ext <= Int
+                    cc_head = self.segment.root(d.head)
+                    cc_tail = self.segment.root(d.tail)
+                    f_head = 0.05
+                    f_tail = 0.05
+                    if cc_head not in self.component or \
+                       cc_tail not in self.component or \
+                       (d.weight <= self.component[cc_head] + f_head and
+                        d.weight <= self.component[cc_tail] + f_tail):
+                        contraction_kernel.add(d)
             if len(contraction_kernel) == 0:
                 break
             print "iteration %d: #edge contracted=%d" % \
-                    (k, len(contraction_kernel))
+                  (k, len(contraction_kernel))
             # Contract edges in contraction kernel.
-            for (u, v) in contraction_kernel:
-                if self.segment.root(u) != self.segment.root(v):
+            for d in contraction_kernel:
+                if self.segment.root(d.head) != self.segment.root(d.tail):
                     #print 'contracting:', u, v
-                    self.grid_graph.contract_edge(
-                            self.segment.root(u), self.segment.root(v))
+                    # The value of d changed during the contract_edge call
+                    u, v = d.head, d.tail
+                    cc_u, cc_v = self.segment.root(u), self.segment.root(v)
+                    self.grid_graph.contract_edge(cc_u, cc_v)
                     self.segment.unite(u, v)
-                assert(len(set(self.segment.array())) == len(self.grid_graph.primal))
-            # TODO: Update edge attributes to be the smallest edge merged in.
+                    if cc_u in self.component:
+                        self.component[cc_u] = max(
+                                self.component[cc_u], d.weight)
+                    else:
+                        self.component[cc_u] = d.weight
+                assert(len(set(self.segment.array())) ==
+                       len(self.grid_graph.primal)), \
+                       "length not equal: %d %d" % \
+                       (len(set(self.segment.array())), \
+                        len(self.grid_graph.primal))
             print np.array(self.segment.array()).reshape(self.shape)
         return self.segment.array()
 
@@ -86,7 +95,9 @@ def main(args):
     #print np.array(segment).reshape(image.shape)
     plot_segment(image, segment, args.image_path)
 
+import random
 if __name__ == '__main__':
+    random.seed(0)
     parser = argparse.ArgumentParser()
     parser.add_argument('--image_path', type=str)
     args, unparsed = parser.parse_known_args()
